@@ -11,20 +11,8 @@ pipeline {
 
         stage('Setup Python Environment') {
             steps {
-                echo 'Creating Python virtual environment...'
                 sh '''
                     python3 -m venv .venv
-                    .venv/bin/python --version
-                    .venv/bin/python -m pip --version
-                '''
-            }
-        }
-
-        stage('Install Dependencies') {
-            steps {
-                echo 'Installing Python dependencies...'
-                sh '''
-                    .venv/bin/python -m pip install --upgrade pip
                     .venv/bin/python -m pip install -r app/requirements.txt
                     .venv/bin/python -m pip install pytest
                 '''
@@ -37,19 +25,43 @@ pipeline {
                 sh '.venv/bin/python -m pytest tests/ -v'
             }
         }
+
+        stage('Build Docker Image') {
+            steps {
+                echo 'Building Docker image...'
+                sh 'docker build -t experiment4-app:${BUILD_NUMBER} .'
+            }
+        }
+
+        stage('Deploy Container') {
+            steps {
+                echo 'Deploying application container...'
+                sh '''
+                    docker rm -f experiment4-web || true
+                    docker run -d --restart unless-stopped \
+                        --name experiment4-web \
+                        -p 8081:5000 \
+                        experiment4-app:${BUILD_NUMBER}
+                '''
+            }
+        }
+
+        stage('Verify Deployment') {
+            steps {
+                sh 'curl --fail --retry 5 --retry-delay 2 http://127.0.0.1:8081/health'
+            }
+        }
     }
 
     post {
         success {
-            echo 'SUCCESS: CI Pipeline completed successfully!'
+            echo 'SUCCESS: CI/CD pipeline completed!'
         }
-
         failure {
-            echo 'FAILURE: Check Console Output for errors.'
+            echo 'FAILURE: Check Console Output.'
         }
-
         always {
-            echo 'CI Pipeline execution finished.'
+            echo 'Pipeline execution finished.'
         }
     }
 }
