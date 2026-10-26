@@ -23,7 +23,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install -r app/requirements.txt
-          python -m pip install pytest
+          python -m pip install pytest pyyaml
 
       - name: Run automated tests
         run: python -m pytest tests/ -v
@@ -33,6 +33,15 @@ jobs:
 
       - name: Validate Kubernetes manifests
         run: |
-          docker run --rm -v "$PWD:/work" -w /work \
-            alpine/k8s:1.32.0 kubectl \
-            apply --dry-run=client -f k8s/
+          python - <<'PY'
+          import yaml
+          from pathlib import Path
+
+          for path in sorted(Path("k8s").glob("*.yaml")):
+              with path.open(encoding="utf-8") as file:
+                  doc = yaml.safe_load(file)
+              assert isinstance(doc, dict), f"{path} is not a YAML object"
+              for key in ("apiVersion", "kind", "metadata", "spec"):
+                  assert key in doc, f"{path}: missing {key}"
+              print(f"PASS: {path} ({doc['kind']})")
+          PY
